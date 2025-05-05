@@ -1,4 +1,5 @@
 import os, psycopg
+from types import NoneType
 
 conn = psycopg.connect(host=os.getenv("PL_HOST"),
                        dbname=os.getenv("PL_DBNAME"),
@@ -28,7 +29,6 @@ def new_parking(number_plate, car_make, car_color):
             "floor_number": new_parking_details[3]
         }
 
-
 def show_ticket_details(ticketid):
     with conn.cursor() as cur:
         #use prepared statements
@@ -53,7 +53,6 @@ def show_ticket_details(ticketid):
                 "slot_number": ticket_details[6],
                 "floor_number": ticket_details[7]
             }
-
 
 # change function name to specific
 def update_parking_details(ticketid):
@@ -92,6 +91,11 @@ def update_parking_details(ticketid):
             }
         return {"message": "This ticket is already closed!"}
 
+def show_location(number_plate):
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT slots.slot_number, slots.floor_number from tickets LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid WHERE tickets.number_plate='{number_plate}' AND tickets.exit_time IS NULL")
+        location = cur.fetchone()
+        return {"slot_number": location[0], "floor_number": location[1]}
 
 def show_all_slots():
     with conn.cursor() as cur:
@@ -121,3 +125,30 @@ def show_all_slots():
         }
         for slot in all_slots
     ]
+
+def show_number_plates(car_color, car_make):
+    print(car_make)
+    with conn.cursor() as cur:
+        if car_color is None:
+            cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
+                                    FROM tickets
+                                    LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
+                                    WHERE tickets.car_make='{car_make}' AND tickets.exit_time IS NULL""")
+        elif car_make is None:
+            cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
+                                    FROM tickets
+                                    LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
+                                    WHERE tickets.car_color='{car_color}' AND tickets.exit_time IS NULL""")
+        else:
+            cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
+                        FROM tickets
+                        LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
+                        WHERE tickets.car_color='{car_color}' AND tickets.car_make='{car_make}' AND tickets.exit_time IS NULL""")
+        number_plates = cur.fetchall()
+        conn.commit()
+        return [{"ticketid": number_plate[0],
+                "number_plate": number_plate[1],
+                "car_make": number_plate[2],
+                "car_color": number_plate[3],
+                "slot_number": number_plate[4],
+                "floor_number": number_plate[5]} for number_plate in number_plates]
