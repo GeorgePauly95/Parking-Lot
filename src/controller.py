@@ -24,7 +24,7 @@ def register_routes(app):
         number_plate=new_parking_details["number_plate"]
         car_make=new_parking_details["car_make"]
         car_color=new_parking_details["car_color"]
-        return new_parking(number_plate, car_make, car_color)
+        return new_parking(number_plate, car_make, car_color), 200, {"Access-Control-Allow-Origin":"*"}
 
     # 2nd API
     @app.route('/api/tickets/<int:ticketid>')
@@ -32,7 +32,7 @@ def register_routes(app):
         ticket_details = show_ticket_details(ticketid)
         if ticket_details == {"message": "Invalid ticketid"}:
             return {"message": "Invalid ticketid"}, 404
-        return ticket_details
+        return ticket_details, 200, {"Access-Control-Allow-Origin":"*"}
 
     #3rd API
     @app.route('/api/tickets/<int:ticketid>', methods=['PATCH'])
@@ -45,11 +45,11 @@ def register_routes(app):
             elif ticket_status == {"message": "This ticket is already closed!"}:
                 return {"message": "This ticket is already closed!"}, 409
             else:
-                return ticket_status
+                return ticket_status, 200, {"Access-Control-Allow-Origin":"*"}
 
     #5th API
     @app.route('/api/tickets')
     def show_number_plates_route():
         color = request.args.get("car-color")
         make = request.args.get("car-make")
-        return show_number_plates(color, make)
+        return show_number_plates(color, make), 200, {"Access-Control-Allow-Origin":"*"}
