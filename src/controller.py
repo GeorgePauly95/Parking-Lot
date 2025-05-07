@@ -12,10 +12,10 @@ def register_routes(app):
                 return """<title>500 Internal Server Error</title>
                         </head><body><h1>Internal Server Error</h1>
                         <p>The server was unable to complete your request. Please try again later.</p>""", 500
-            return show_all_slots()
+            return show_all_slots(), 200, {"Access-Control-Allow-Origin":"*"}
         else:
             number_plate = request.args.get("number-plate")
-            return show_location(number_plate)
+            return show_location(number_plate), 200, {"Access-Control-Allow-Origin":"*"}
 
     #1st API
     @app.route('/api/tickets', methods=['POST'])
