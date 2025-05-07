@@ -6,7 +6,7 @@ register_routes(app)
 
 @app.route('/')
 def home():
-    return 'BbB Parking Lot!'
+    return '<title>BbB Parking Lot!</title> <h1>BbB Parking Lot!</h1>'
 
 if __name__ == "__main__":
     app.run(debug=True)

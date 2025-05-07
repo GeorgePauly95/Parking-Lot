@@ -1,25 +1,26 @@
 import os, psycopg
-from types import NoneType
 
 conn = psycopg.connect(host=os.getenv("PL_HOST"),
                        dbname=os.getenv("PL_DBNAME"),
                        user=os.getenv("PL_USERNAME"),
                        password=os.getenv("PL_PASSWORD"))
 
-
+#1st API View Function
 def new_parking(number_plate, car_make, car_color):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT slot_number,floor_number FROM slots "
-            "WHERE slot_number NOT IN (select slotid FROM tickets WHERE exit_time IS NULL) ORDER BY slots.slot_number ASC;")
+            "WHERE slot_number NOT IN (select slotid FROM tickets WHERE exit_time IS NULL) ORDER BY slots.slot_number ASC LIMIT 1;")
         slot_available = cur.fetchone()
-        cur.execute("INSERT INTO tickets(number_plate, car_make, car_color, slotid) VALUES(%s, %s, %s, %s)",
+        cur.execute("""INSERT INTO tickets(number_plate, car_make, car_color, slotid) VALUES(%s, %s, %s, %s)
+                    RETURNING ticketid""",
                     (number_plate, car_make, car_color, slot_available[0]))
-        cur.execute(f"""
+        created_ticketid=cur.fetchone()
+        cur.execute("""
                     SELECT tickets.ticketid, tickets.entry_time, slots.slot_number, slots.floor_number FROM tickets
                     LEFT OUTER JOIN slots on tickets.slotid=slots.slot_number
-                    ORDER BY tickets.ticketid DESC LIMIT 1;
-                    """)
+                    WHERE tickets.ticketid=(%s);
+                    """,created_ticketid)
         new_parking_details = cur.fetchone()
         conn.commit()
         return {
@@ -28,16 +29,15 @@ def new_parking(number_plate, car_make, car_color):
             "slot_number": new_parking_details[2],
             "floor_number": new_parking_details[3]
         }
-
+#2nd API View Function
 def show_ticket_details(ticketid):
     with conn.cursor() as cur:
-        #use prepared statements
-        cur.execute(f"""
+        cur.execute("""
                     SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color,
                     tickets.entry_time,tickets.exit_time, slots.slot_number, slots.floor_number FROM tickets
                     LEFT OUTER JOIN slots ON tickets.slotid=slots.slot_number
-                    WHERE ticketid={ticketid}
-                    """)
+                    WHERE ticketid=(%s)
+                    """, (ticketid,))
         ticket_details = cur.fetchone()
         conn.commit()
         if ticket_details is None:
@@ -53,29 +53,24 @@ def show_ticket_details(ticketid):
                 "slot_number": ticket_details[6],
                 "floor_number": ticket_details[7]
             }
-
-# change function name to specific
-def update_parking_details(ticketid):
+#3rd API View Function
+def update_exit_time(ticketid):
     with conn.cursor() as cur:
-        #use prepared statements
-
-        cur.execute(f"SELECT exit_time FROM tickets WHERE ticketid={ticketid}")
-        #change ticket_status to exit_time
-        ticket_status = cur.fetchone()
-        if ticket_status[0] is None:
-            # use prepared statements
-
-            cur.execute(f"UPDATE tickets SET exit_time=CURRENT_TIMESTAMP WHERE ticketid = {ticketid}")
-#merge both Update statements
-            cur.execute(
-                f"UPDATE tickets SET parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(exit_time,entry_time))*50)/3600,4) WHERE ticketid={ticketid}")
-
+        cur.execute("SELECT exit_time FROM tickets WHERE ticketid=(%s)",(ticketid,))
+        exit_time = cur.fetchone()
+        if exit_time is None:
+            return {"message": "Invalid ticketid"}
+        elif exit_time[0] is None:
+            # cur.execute("UPDATE tickets SET exit_time=CURRENT_TIMESTAMP, parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(exit_time,entry_time))*50)/3600,4) WHERE ticketid = (%s)",(ticketid,))
+            cur.execute("UPDATE tickets SET exit_time=CURRENT_TIMESTAMP WHERE ticketid = (%s)",(ticketid,))
+            #merge both Update statements
+            cur.execute("UPDATE tickets SET parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(exit_time,entry_time))*50)/3600,4) WHERE ticketid=(%s)",(ticketid,))
             cur.execute(f"""
                         SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color,
                         tickets.entry_time,tickets.exit_time, tickets.parking_charge, slots.slot_number, slots.floor_number FROM tickets
                         LEFT OUTER JOIN slots ON tickets.slotid=slots.slot_number
-                        WHERE ticketid = {ticketid}
-                        """)
+                        WHERE ticketid = (%s)
+                        """,(ticketid,))
             ticket_details = cur.fetchone()
             conn.commit()
             return {
@@ -91,19 +86,22 @@ def update_parking_details(ticketid):
             }
         return {"message": "This ticket is already closed!"}
 
+#6th API View Function
 def show_location(number_plate):
     with conn.cursor() as cur:
         cur.execute(f"SELECT slots.slot_number, slots.floor_number from tickets LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid WHERE tickets.number_plate='{number_plate}' AND tickets.exit_time IS NULL")
         location = cur.fetchone()
         return {"slot_number": location[0], "floor_number": location[1]}
 
+#4th API View Function
 def show_all_slots():
     with conn.cursor() as cur:
         cur.execute("""
-                    SELECT slots.slot_number, slots.floor_number, tickets.number_plate, tickets.car_make, tickets.car_color,tickets.exit_time
+                    SELECT slots.slot_number, slots.floor_number, open_tickets.number_plate, open_tickets.car_make, open_tickets.car_color
                     FROM slots
-                    LEFT OUTER JOIN tickets ON slots.slot_number=tickets.slotid
-                    ORDER BY slots.slot_number;
+                    LEFT OUTER JOIN (SELECT tickets.number_plate, tickets.car_make, tickets.car_color, tickets.exit_time, tickets.slotid
+                    FROM tickets WHERE tickets.exit_time IS NULL) AS open_tickets
+                    ON slots.slot_number=open_tickets.slotid;
                     """)
         all_slots = cur.fetchall()
         conn.commit()
@@ -113,7 +111,7 @@ def show_all_slots():
             "floor_number": slot[1],
             "car": None
         }
-        if (slot[2] and slot[3] and slot[3]) is None
+        if (slot[2] and slot[3] and slot[4]) is None
 
         else {
             "slot_number": slot[0],
@@ -126,24 +124,25 @@ def show_all_slots():
         for slot in all_slots
     ]
 
+#5th API View Function
 def show_number_plates(car_color, car_make):
     print(car_make)
     with conn.cursor() as cur:
         if car_color is None:
-            cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
+            cur.execute("""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
                                     FROM tickets
                                     LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
-                                    WHERE tickets.car_make='{car_make}' AND tickets.exit_time IS NULL""")
+                                    WHERE tickets.car_make=(%s) AND tickets.exit_time IS NULL""",(car_make,))
         elif car_make is None:
-            cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
+            cur.execute("""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
                                     FROM tickets
                                     LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
-                                    WHERE tickets.car_color='{car_color}' AND tickets.exit_time IS NULL""")
+                                    WHERE tickets.car_color=(%s) AND tickets.exit_time IS NULL""",(car_color,))
         else:
             cur.execute(f"""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
                         FROM tickets
                         LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid
-                        WHERE tickets.car_color='{car_color}' AND tickets.car_make='{car_make}' AND tickets.exit_time IS NULL""")
+                        WHERE tickets.car_color=(%s) AND tickets.car_make=(%s) AND tickets.exit_time IS NULL""",(car_color, car_make))
         number_plates = cur.fetchall()
         conn.commit()
         return [{"ticketid": number_plate[0],
