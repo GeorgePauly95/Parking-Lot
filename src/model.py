@@ -5,7 +5,6 @@ conn = psycopg.connect(host=os.getenv("PL_HOST"),
                        user=os.getenv("PL_USERNAME"),
                        password=os.getenv("PL_PASSWORD"))
 
-#1st API View Function
 def new_parking(number_plate, car_make, car_color):
     with conn.cursor() as cur:
         cur.execute(
@@ -29,7 +28,6 @@ def new_parking(number_plate, car_make, car_color):
             "slot_number": new_parking_details[2],
             "floor_number": new_parking_details[3]
         }
-#2nd API View Function
 def show_ticket_details(ticketid):
     with conn.cursor() as cur:
         cur.execute("""
@@ -53,7 +51,7 @@ def show_ticket_details(ticketid):
                 "slot_number": ticket_details[6],
                 "floor_number": ticket_details[7]
             }
-#3rd API View Function
+
 def update_exit_time(ticketid):
     with conn.cursor() as cur:
         cur.execute("SELECT exit_time FROM tickets WHERE ticketid=(%s)",(ticketid,))
@@ -61,10 +59,7 @@ def update_exit_time(ticketid):
         if exit_time is None:
             return {"message": "Invalid ticketid"}
         elif exit_time[0] is None:
-            # cur.execute("UPDATE tickets SET exit_time=CURRENT_TIMESTAMP, parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(exit_time,entry_time))*50)/3600,4) WHERE ticketid = (%s)",(ticketid,))
-            cur.execute("UPDATE tickets SET exit_time=CURRENT_TIMESTAMP WHERE ticketid = (%s)",(ticketid,))
-            #merge both Update statements
-            cur.execute("UPDATE tickets SET parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(exit_time,entry_time))*50)/3600,4) WHERE ticketid=(%s)",(ticketid,))
+            cur.execute("UPDATE tickets SET exit_time=CURRENT_TIMESTAMP, parking_charge=ROUND((EXTRACT(EPOCH FROM AGE(CURRENT_TIMESTAMP,entry_time))*50)/3600,4) WHERE ticketid = (%s)",(ticketid,))
             cur.execute(f"""
                         SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color,
                         tickets.entry_time,tickets.exit_time, tickets.parking_charge, slots.slot_number, slots.floor_number FROM tickets
@@ -86,14 +81,12 @@ def update_exit_time(ticketid):
             }
         return {"message": "This ticket is already closed!"}
 
-#6th API View Function
 def show_location(number_plate):
     with conn.cursor() as cur:
         cur.execute(f"SELECT slots.slot_number, slots.floor_number from tickets LEFT OUTER JOIN slots ON slots.slot_number=tickets.slotid WHERE tickets.number_plate='{number_plate}' AND tickets.exit_time IS NULL")
         location = cur.fetchone()
         return {"slot_number": location[0], "floor_number": location[1]}
 
-#4th API View Function
 def show_all_slots():
     with conn.cursor() as cur:
         cur.execute("""
@@ -124,9 +117,7 @@ def show_all_slots():
         for slot in all_slots
     ]
 
-#5th API View Function
 def show_number_plates(car_color, car_make):
-    print(car_make)
     with conn.cursor() as cur:
         if car_color is None:
             cur.execute("""SELECT tickets.ticketid, tickets.number_plate, tickets.car_make, tickets.car_color, slots.slot_number, slots.floor_number
