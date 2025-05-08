@@ -1,10 +1,12 @@
 from flask import request
 
+
 from src.model import show_all_slots, show_ticket_details, update_exit_time, new_parking, show_number_plates, show_location
 
 def register_routes(app):
     @app.route('/api/slots')
     def show_location_route():
+        raise Exception("parkinglot")
         if request.args.get("number-plate") is None:
             try:
                 all_slots = show_all_slots()
