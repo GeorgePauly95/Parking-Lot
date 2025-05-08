@@ -10,7 +10,7 @@ def home():
     return '<title>BbB Parking Lot!</title> <h1>BbB Parking Lot!</h1>', 200, {"Access-Control-Allow-Origin":"*"}
 
 @app.errorhandler(500)
-def internal_server_error():
+def internal_server_error(error):
     return "Server Error", 500
 
 if __name__ == "__main__":
